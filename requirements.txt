@@ -1,0 +1,4 @@
+asn1crypto==0.24.0
+cryptography==2.7
+pyOpenSSL==19.0.0
+six==1.12.0

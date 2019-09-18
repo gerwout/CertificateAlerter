@@ -1,0 +1,15 @@
+[mail]
+# send mail when checking a file with hostnames
+SENDMAIL=True
+# use SMTP authentication
+SMTPAUTH=True
+# hostname smtp server
+SMTPSERVER=smtp.example.com
+# username used for smtp authentication
+SMTPUSER=certchecker
+# password used for smtp authentication
+SMTPPASS=very_strong_password
+# email address that sends the message
+FROMADDRESS=certchecker@example.com
+# seperate multiple receivers with a ;
+RECEIVERS=ops@example.com;infosec@example.com
