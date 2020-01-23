@@ -4,6 +4,7 @@ import sys
 import ssl
 import OpenSSL.crypto
 import socket
+
 from urllib.parse import urlparse
 import time
 from datetime import datetime
@@ -11,8 +12,10 @@ import math
 import configparser
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import COMMASPACE
 import smtplib
+
+# Give it 4 seconds max, before timing out
+socket.setdefaulttimeout(4)
 
 def get_configuration():
     dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -34,7 +37,7 @@ def send_mail(config, send_from, send_to, subject, text):
     assert isinstance(send_to, list)
     msg = MIMEMultipart()
     msg['From'] = send_from
-    msg['To'] = COMMASPACE.join(send_to)
+    msg['To'] = ",".join(send_to)
     msg['Subject'] = subject
     msg.attach(MIMEText(text, "plain"))
     smtp = smtplib.SMTP(config.get('mail', 'SMTPSERVER'))
@@ -72,13 +75,15 @@ def get_certificate_details(host_name, port):
     s = ctx.wrap_socket(socket.socket(), server_hostname=host_name)
     try:
         s.connect((host_name, port))
-    except ssl.SSLCertVerificationError:
-        not_trusted = True
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        s = ctx.wrap_socket(socket.socket(), server_hostname=host_name)
-        s.connect((host_name, port))
+    except (ssl.SSLError, ssl.CertificateError):
+        cert_details = {}
+        cert_details['not_trusted'] = True
+        return cert_details
+    except (TimeoutError, socket.timeout):
+        cert_details = {}
+        cert_details['host_does_not_respond'] = True
+        cert_details['not_trusted'] = True
+        return cert_details
 
     cert_details = return_relevant_cert_data(s.getpeercert(binary_form=True))
 
@@ -125,8 +130,13 @@ def has_wildcard_record_match(valid_for, host_name):
 def get_certificate_status(site):
     details = get_url_details(site)
     host_name = details['host']
-    port = details['port']
+    port = int(details['port'])
     cert_details = get_certificate_details(host_name, port)
+
+    if cert_details.get('host_does_not_respond', False):
+        msg = "Host " + host_name + " does not seem to respond, can't check certificate status!" \
+
+        return msg
 
     if cert_details['not_trusted']:
         msg = "Certificate for host " + host_name + " is not trusted!, please issue a new certificate!"
