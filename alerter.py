@@ -79,7 +79,7 @@ def get_certificate_details(host_name, port):
         cert_details = {}
         cert_details['not_trusted'] = True
         return cert_details
-    except (TimeoutError, socket.timeout):
+    except (TimeoutError, socket.timeout, ConnectionRefusedError):
         cert_details = {}
         cert_details['host_does_not_respond'] = True
         cert_details['not_trusted'] = True
