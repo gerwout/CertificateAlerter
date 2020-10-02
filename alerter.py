@@ -78,11 +78,27 @@ def get_certificate_details(host_name, port):
     except (ssl.SSLError, ssl.CertificateError):
         cert_details = {}
         cert_details['not_trusted'] = True
+        cert_details['error'] = "SSL/TLS error or problem with the certificate"
         return cert_details
     except (TimeoutError, socket.timeout, ConnectionRefusedError):
         cert_details = {}
         cert_details['host_does_not_respond'] = True
         cert_details['not_trusted'] = True
+        cert_details['error'] = "Can't connect! Is it firewalled?"
+        return cert_details
+    # dns resolving issue
+    except (socket.gaierror):
+        cert_details = {}
+        cert_details['host_does_not_respond'] = True
+        cert_details['not_trusted'] = True
+        cert_details['error'] = "Can't resolve! DNS problem"
+        return cert_details
+    # unknown exception
+    except Exception as ex:
+        cert_details = {}
+        cert_details['host_does_not_respond'] = True
+        cert_details['not_trusted'] = True
+        cert_details['error'] = 'Unknown exception ' + type(ex) + ' ' + ex.args
         return cert_details
 
     cert_details = return_relevant_cert_data(s.getpeercert(binary_form=True))
@@ -133,13 +149,15 @@ def get_certificate_status(site):
     port = int(details['port'])
     cert_details = get_certificate_details(host_name, port)
 
+    error_msg = cert_details.get('error', "")
+
     if cert_details.get('host_does_not_respond', False):
-        msg = "Host " + host_name + " does not seem to respond, can't check certificate status!" \
+        msg = "Host " + host_name + " does not seem to respond, can't check certificate status! " + error_msg
 
         return msg
 
     if cert_details['not_trusted']:
-        msg = "Certificate for host " + host_name + " is not trusted!, please issue a new certificate!"
+        msg = "Certificate for host " + host_name + " is not trusted!, please issue a new certificate! " + error_msg
         return msg
 
     valid_for = []
@@ -185,6 +203,7 @@ def main():
     if site is not None:
         site = site.lower()
         msg = get_certificate_status(site)
+        print("INFO: Single host check does not send email!")
         if msg is None:
             print("Nothing to do for the certificate " + site)
         else:
@@ -202,13 +221,20 @@ def main():
                 msg = get_certificate_status(host_name)
                 if msg is not None:
                     return_msg = return_msg + msg + "\n"
-        if return_msg != "" and send_email:
-            if (send_email):
+        if (send_email):
+            if return_msg != "":
                 receivers = config.get('mail', 'RECEIVERS').split(";")
                 from_address = config.get('mail', 'FROMADDRESS')
                 print("Going to send email...\n")
                 send_mail(config, from_address, receivers, "HTTP Certificates Alert " + str(datetime.now()), return_msg)
                 print(return_msg)
+            else:
+                print("No errors encountered, not going to send mail.")
+        else:
+            print("Not sending email")
+            print("")
+            print(return_msg)
+
 
 if __name__ == "__main__":
     main()
