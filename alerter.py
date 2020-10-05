@@ -4,7 +4,6 @@ import sys
 import ssl
 import OpenSSL.crypto
 import socket
-
 from urllib.parse import urlparse
 import time
 from datetime import datetime
@@ -13,6 +12,9 @@ import configparser
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
+import json
+import requests
+import base64
 
 # Give it 4 seconds max, before timing out
 socket.setdefaulttimeout(4)
@@ -33,8 +35,36 @@ def get_configuration():
 
     return config
 
+def create_zendesk_ticket(config, subject, text):
+    request_path = "/api/v2/tickets.json"
+    ticket_dict = {'ticket': {
+        'subject': subject,
+        'comment': {
+            'body': text
+        }
+    }}
+    payload = json.dumps(ticket_dict)
+    domain = config.get('zendesk', 'ZENDESKDOMAIN')
+    api_user = config.get('zendesk', 'ZENDESKUSER')
+    api_key = config.get('zendesk', 'APIKEY')
+    url = domain + request_path
+    token_header = api_user + "/token:" + api_key
+    auth_header_value = b"Basic " + base64.b64encode(token_header.encode('utf-8'))
+
+    headers = {'content-type': 'application/json', 'authorization': auth_header_value.decode('ascii')}
+    response = requests.post(url, data=payload, headers=headers)
+
+    if response.status_code != 201:
+        print('Status:', response.status_code, 'Problem with the request. Exiting.')
+        exit()
+    else:
+        print('Successfully created Zendesk ticket')
+        print(response.text)
+
 def send_mail(config, send_from, send_to, subject, text):
     assert isinstance(send_to, list)
+    user_name = config.get('mail', 'SMTPUSER')
+    password = config.get('mail', 'SMTPPASS')
     msg = MIMEMultipart()
     msg['From'] = send_from
     msg['To'] = ",".join(send_to)
@@ -42,11 +72,17 @@ def send_mail(config, send_from, send_to, subject, text):
     msg.attach(MIMEText(text, "plain"))
     smtp = smtplib.SMTP(config.get('mail', 'SMTPSERVER'))
     smtp.connect(config.get('mail', 'SMTPSERVER'), 587)
+    smtp.ehlo()
     smtp.starttls()
 
     if (config.getboolean('mail', 'SMTPAUTH')):
-        smtp.login(config.get('mail', 'SMTPUSER'), config.get('mail', 'SMTPPASS'))
-
+        try:
+            smtp.login(user_name, password)
+        except:
+            type, value, traceback = sys.exc_info()
+            print(type)
+            print(value)
+            exit(0)
     smtp.sendmail(send_from, send_to, msg.as_string())
     smtp.quit()
 
@@ -211,6 +247,8 @@ def main():
     elif file is not None:
         config = get_configuration()
         send_email = config.getboolean('mail', 'SENDMAIL')
+        create_zendesk = config.getboolean('zendesk', 'CREATETICKET')
+
         return_msg = ""
         f = open(file, "r")
         lines = f.readlines()
@@ -218,10 +256,11 @@ def main():
         for line in lines:
             host_name = line.strip().lower()
             if len(host_name) != 0:
+                print("Checking host name: " + host_name)
                 msg = get_certificate_status(host_name)
                 if msg is not None:
                     return_msg = return_msg + msg + "\n"
-        if (send_email):
+        if send_email:
             if return_msg != "":
                 receivers = config.get('mail', 'RECEIVERS').split(";")
                 from_address = config.get('mail', 'FROMADDRESS')
@@ -230,11 +269,9 @@ def main():
                 print(return_msg)
             else:
                 print("No errors encountered, not going to send mail.")
-        else:
-            print("Not sending email")
-            print("")
-            print(return_msg)
-
+        if create_zendesk:
+            if return_msg != "":
+                create_zendesk_ticket(config, "HTTP Certificates Alert " + str(datetime.now()), return_msg)
 
 if __name__ == "__main__":
     main()
