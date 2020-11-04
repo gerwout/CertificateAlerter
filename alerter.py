@@ -129,12 +129,18 @@ def get_certificate_details(host_name, port):
         cert_details['not_trusted'] = True
         cert_details['error'] = "Can't resolve! DNS problem"
         return cert_details
+    except ConnectionResetError:
+        cert_details = {}
+        cert_details['host_does_not_respond'] = True
+        cert_details['not_trusted'] = True
+        cert_details['error'] ="Connection reset unexpected, did the service send a certificate?"
+        return cert_details
     # unknown exception
     except Exception as ex:
         cert_details = {}
         cert_details['host_does_not_respond'] = True
         cert_details['not_trusted'] = True
-        cert_details['error'] = 'Unknown exception ' + type(ex) + ' ' + ex.args
+        cert_details['error'] = 'Unknown exception ' + ex.__class__.__name__
         return cert_details
 
     cert_details = return_relevant_cert_data(s.getpeercert(binary_form=True))
