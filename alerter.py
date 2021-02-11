@@ -129,12 +129,18 @@ def get_certificate_details(host_name, port):
         cert_details['not_trusted'] = True
         cert_details['error'] = "Can't resolve! DNS problem"
         return cert_details
+    except ConnectionResetError:
+        cert_details = {}
+        cert_details['host_does_not_respond'] = True
+        cert_details['not_trusted'] = True
+        cert_details['error'] ="Connection reset unexpected, did the service send a certificate?"
+        return cert_details
     # unknown exception
     except Exception as ex:
         cert_details = {}
         cert_details['host_does_not_respond'] = True
         cert_details['not_trusted'] = True
-        cert_details['error'] = 'Unknown exception ' + type(ex) + ' ' + ex.args
+        cert_details['error'] = 'Unknown exception ' + ex.__class__.__name__
         return cert_details
 
     cert_details = return_relevant_cert_data(s.getpeercert(binary_form=True))
@@ -198,17 +204,17 @@ def get_certificate_status(site):
 
     valid_for = []
     if len(cert_details.get('commonName', "")) > 0:
-        valid_for.append(cert_details['commonName'])
+        valid_for.append(cert_details['commonName'].lower())
     if len(cert_details.get('subjectAltName', [])) == 0:
         msg = "No SAN for: " + host_name + ", this hostname does not comply with the newer RFC2818 and RFC6125 standards"
         msg = msg + ", please create a certificate with a subject alternative name!, Chrome will not trust this certificate!"
         return msg
     else:
         for item in cert_details['subjectAltName']:
-            valid_for.append(item)
+            valid_for.append(item.lower())
         valid_for = list(set(valid_for))
         if host_name not in valid_for and not has_wildcard_record_match(valid_for, host_name):
-            msg = "The certificate has not been issued for hostname " + host_name + '!'
+            msg = "The certificate has not been issued for hostname " + host_name + ':' + str(port) + '!'
             return msg
         else:
             days_left = get_days_left(cert_details)
@@ -272,6 +278,9 @@ def main():
         if create_zendesk:
             if return_msg != "":
                 create_zendesk_ticket(config, "HTTP Certificates Alert " + str(datetime.now()), return_msg)
+
+        if not create_zendesk and not send_email:
+            print(return_msg)
 
 if __name__ == "__main__":
     main()
