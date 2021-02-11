@@ -15,6 +15,7 @@ import smtplib
 import json
 import requests
 import base64
+import pprint
 
 # Give it 4 seconds max, before timing out
 socket.setdefaulttimeout(4)
@@ -107,10 +108,12 @@ def return_relevant_cert_data(raw_der_cert):
 def get_certificate_details(host_name, port):
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
-    not_trusted = False
     s = ctx.wrap_socket(socket.socket(), server_hostname=host_name)
     try:
         s.connect((host_name, port))
+        cert_details = return_relevant_cert_data(s.getpeercert(binary_form=True))
+        cert_details['not_trusted'] = False
+        return cert_details
     except (ssl.SSLError, ssl.CertificateError):
         cert_details = {}
         cert_details['not_trusted'] = True
@@ -142,15 +145,6 @@ def get_certificate_details(host_name, port):
         cert_details['not_trusted'] = True
         cert_details['error'] = 'Unknown exception ' + ex.__class__.__name__
         return cert_details
-
-    cert_details = return_relevant_cert_data(s.getpeercert(binary_form=True))
-
-    if not_trusted:
-        cert_details['not_trusted'] = True
-    else:
-        cert_details['not_trusted'] = False
-
-    return cert_details
 
 def get_url_details(url):
     url = url.lower()
@@ -190,7 +184,6 @@ def get_certificate_status(site):
     host_name = details['host']
     port = int(details['port'])
     cert_details = get_certificate_details(host_name, port)
-
     error_msg = cert_details.get('error', "")
 
     if cert_details.get('host_does_not_respond', False):
