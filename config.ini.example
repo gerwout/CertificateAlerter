@@ -13,3 +13,17 @@ SMTPPASS=very_strong_password
 FROMADDRESS=certchecker@example.com
 # seperate multiple receivers with a ;
 RECEIVERS=ops@example.com;infosec@example.com
+
+[zendesk]
+# create a zendesk ticket or not
+CREATETICKET=False
+# url towards your zendesk instance
+ZENDESKDOMAIN=https://customername.zendesk.com/
+# username for authentication
+ZENDESKUSER=username@mail.com
+# API KEY for zendesk
+APIKEY=<put zendesk api key here>
+
+[customcerts]
+# directory that has additional root ca certificates that are considered trusted
+CUSTOMROOTCERTSPATH=c:\certalerter\custom_root_certs\

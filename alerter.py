@@ -15,10 +15,8 @@ import smtplib
 import json
 import requests
 import base64
-import pprint
-
-# Give it 4 seconds max, before timing out
-socket.setdefaulttimeout(4)
+import glob
+import pprint, traceback
 
 def get_configuration():
     dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -35,6 +33,11 @@ def get_configuration():
     config.read_string(content)
 
     return config
+
+
+# Give it 4 seconds max, before timing out
+socket.setdefaulttimeout(4)
+config = get_configuration()
 
 def create_zendesk_ticket(config, subject, text):
     request_path = "/api/v2/tickets.json"
@@ -107,7 +110,18 @@ def return_relevant_cert_data(raw_der_cert):
 
 def get_certificate_details(host_name, port):
     ctx = ssl.create_default_context()
-    ctx.check_hostname = False
+
+    try:
+        custom_root_certs_path = config.get('customcerts', 'CUSTOMROOTCERTSPATH')
+        if not os.path.exists(custom_root_certs_path):
+            print("The directory " + custom_root_certs_path + " does not exists, please update your configuration")
+            exit(0)
+        files = [f for f in glob.glob(custom_root_certs_path + "*", recursive=True)]
+        for f in files:
+            ctx.load_verify_locations(cafile=f)
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        pass
+
     s = ctx.wrap_socket(socket.socket(), server_hostname=host_name)
     try:
         s.connect((host_name, port))
@@ -118,6 +132,7 @@ def get_certificate_details(host_name, port):
         cert_details = {}
         cert_details['not_trusted'] = True
         cert_details['error'] = "SSL/TLS error or problem with the certificate"
+
         return cert_details
     except (TimeoutError, socket.timeout, ConnectionRefusedError):
         cert_details = {}
@@ -244,7 +259,6 @@ def main():
         else:
             print(msg)
     elif file is not None:
-        config = get_configuration()
         send_email = config.getboolean('mail', 'SENDMAIL')
         create_zendesk = config.getboolean('zendesk', 'CREATETICKET')
 
